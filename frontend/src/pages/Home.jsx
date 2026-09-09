@@ -3,6 +3,7 @@ import ImageUploader from '../components/ImageUploader';
 import Loading from '../components/Loading';
 import VerificationResult from '../components/VerificationResult';
 import { api } from '../services/api';
+import AppLogo from '../components/AppLogo';
 import { Shield, AlertCircle, History, ExternalLink } from 'lucide-react';
 
 export default function Home() {
@@ -112,6 +113,9 @@ export default function Home() {
     <div className="home-container">
       {/* Top Header */}
       <header className="app-header">
+        <div className="header-logo-row">
+          <AppLogo size={52} className="brand-logo" />
+        </div>
         <div className="header-badge">
           <span>SIH26034</span>
           <span className="badge-dot">•</span>
