@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = '/api';
+const API_BASE = 'https://sih-zhm8.onrender.com/api';
 
 export const api = {
   /**
