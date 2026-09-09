@@ -1,32 +1,15 @@
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const { requireAuth, allowRoles } = require('../middleware/auth');
 
 const {
   verifyProductHandler,
   getVerificationsHandler,
-  getDemoSamplesHandler
+  getDemoSamplesHandler,
+  updateReviewHandler,
+  downloadReportHandler
 } = require('../controllers/verificationController');
-
-// Ensure uploads directory exists
-const uploadDir = path.join(__dirname, '../uploads');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-// Multer disk storage
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadDir);
-  },
-  filename: function (req, file, cb) {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, 'pkg-' + uniqueSuffix + ext);
-  }
-});
 
 // File filter: accept images only
 const fileFilter = (req, file, cb) => {
@@ -39,14 +22,16 @@ const fileFilter = (req, file, cb) => {
 };
 
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter
 });
 
 // Routes
-router.post('/verify', upload.single('image'), verifyProductHandler);
-router.get('/verifications', getVerificationsHandler);
-router.get('/demo-samples', getDemoSamplesHandler);
+router.post('/verify', requireAuth, allowRoles('admin', 'inspector', 'user'), upload.single('image'), verifyProductHandler);
+router.get('/verifications', requireAuth, allowRoles('admin', 'inspector', 'user'), getVerificationsHandler);
+router.patch('/verifications/:id/review', requireAuth, allowRoles('admin', 'inspector'), updateReviewHandler);
+router.get('/verifications/:id/report', requireAuth, allowRoles('admin', 'inspector', 'user'), downloadReportHandler);
+router.get('/demo-samples', requireAuth, allowRoles('admin', 'inspector', 'user'), getDemoSamplesHandler);
 
 module.exports = router;

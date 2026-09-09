@@ -1,7 +1,4 @@
 const Tesseract = require('tesseract.js');
-const path = require('path');
-const fs = require('fs');
-const { spawnSync } = require('child_process');
 
 /**
  * Built-in Sample Datasets for reliable SIH demonstration / fallback mode
@@ -56,30 +53,6 @@ const DEMO_SAMPLES = [
     }
   }
 ];
-
-/**
- * Preprocesses image using Python/PIL if available (contrast enhancement & sharpening)
- */
-function preprocessImageIfAvailable(imagePath) {
-  try {
-    const scriptPath = path.join(__dirname, 'preprocess.py');
-    if (fs.existsSync(scriptPath)) {
-      const result = spawnSync('python3', [scriptPath, imagePath], {
-        encoding: 'utf-8',
-        timeout: 5000
-      });
-      if (result.status === 0 && result.stdout) {
-        const cleanPath = result.stdout.trim();
-        if (fs.existsSync(cleanPath)) {
-          return cleanPath;
-        }
-      }
-    }
-  } catch (err) {
-    // Non-blocking fallback to original image
-  }
-  return imagePath;
-}
 
 /**
  * Extracts mandatory packaged commodity details from raw OCR text using heuristics & regex.
@@ -299,21 +272,17 @@ function extractInformationFromText(rawText = '') {
 
 /**
  * Executes OCR on image file using Tesseract.js with optional preprocessing.
- * @param {string} imagePath - Absolute or relative path to the image
+ * @param {Buffer} imageBuffer - Uploaded image bytes
  * @returns {Promise<Object>} Extracted product information
  */
-async function processImage(imagePath) {
+async function processImage(imageBuffer) {
   try {
-    if (!fs.existsSync(imagePath)) {
-      throw new Error(`File not found at path: ${imagePath}`);
+    if (!Buffer.isBuffer(imageBuffer) || imageBuffer.length === 0) {
+      throw new Error('Uploaded image data is missing.');
     }
 
-    // 1. Run image preprocessor (contrast enhancement, sharpening)
-    const targetImagePath = preprocessImageIfAvailable(imagePath);
-
-    // 2. Run Tesseract OCR with optimal configuration
     const { data: { text, confidence } } = await Tesseract.recognize(
-      targetImagePath,
+      imageBuffer,
       'eng',
       {
         logger: () => {} // Silent

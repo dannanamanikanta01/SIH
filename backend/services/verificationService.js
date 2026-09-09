@@ -7,9 +7,9 @@ const mongoose = require('mongoose');
 const inMemoryHistory = [];
 
 /**
- * Run end-to-end verification on an image file or sample preset.
+ * Run end-to-end verification on uploaded image bytes or a sample preset.
  */
-async function verifyProduct({ imagePath, demoSampleId, customExtractedData = null, isDemo = false }) {
+async function verifyProduct({ imageBuffer = null, imageMimeType = '', imageName = '', demoSampleId, customExtractedData = null, isDemo = false, userId = null }) {
   let extractedData = null;
   let ocrResult = null;
   let productName = 'Packaged Commodity';
@@ -32,8 +32,8 @@ async function verifyProduct({ imagePath, demoSampleId, customExtractedData = nu
   }
 
   // 3. If real image provided and no preset, run OCR
-  if (!extractedData && imagePath) {
-    ocrResult = await processImage(imagePath);
+  if (!extractedData && imageBuffer) {
+    ocrResult = await processImage(imageBuffer);
     extractedData = ocrResult.extractedData;
     productName = extractedData.productName || 'Packaged Commodity';
   }
@@ -56,8 +56,11 @@ async function verifyProduct({ imagePath, demoSampleId, customExtractedData = nu
   const complianceResult = evaluateCompliance(extractedData);
 
   const verificationRecord = {
+    createdBy: userId || null,
     productName: extractedData.productName || productName,
-    imagePath: imagePath ? `/uploads/${imagePath.split('/').pop()}` : '',
+    imageData: imageBuffer,
+    imageMimeType,
+    imageName,
     extractedData,
     complianceScore: complianceResult.score,
     status: complianceResult.status,
@@ -67,6 +70,12 @@ async function verifyProduct({ imagePath, demoSampleId, customExtractedData = nu
     detectedIssues: complianceResult.detectedIssues,
     isDemo: demoUsed,
     ocrConfidence: ocrResult ? ocrResult.confidence : null,
+    review: {
+      status: 'PENDING',
+      note: '',
+      reviewedBy: null,
+      reviewedAt: null
+    },
     createdAt: new Date()
   };
 
@@ -85,25 +94,81 @@ async function verifyProduct({ imagePath, demoSampleId, customExtractedData = nu
     inMemoryHistory.unshift(verificationRecord);
   }
 
-  return verificationRecord;
+  return withoutImageData(verificationRecord);
 }
 
 /**
  * Fetch past verifications (history)
  */
-async function getVerificationHistory(limit = 10) {
+async function getVerificationHistory(limit = 10, user = null) {
   try {
     if (mongoose.connection.readyState === 1) {
-      return await Verification.find().sort({ createdAt: -1 }).limit(limit).lean();
+      const filter = user?.role === 'user' && mongoose.Types.ObjectId.isValid(user.id)
+        ? { createdBy: user.id }
+        : {};
+      return await Verification.find(filter).select('-imageData').sort({ createdAt: -1 }).limit(limit).lean();
     }
   } catch (err) {
     console.warn('MongoDB query failed, falling back to memory:', err.message);
   }
-  return inMemoryHistory.slice(0, limit);
+  const visibleHistory = user?.role === 'user'
+    ? inMemoryHistory.filter(item => item.createdBy === user.id)
+    : inMemoryHistory;
+  return visibleHistory.slice(0, limit).map(withoutImageData);
+}
+
+function canAccessVerification(record, user) {
+  return user?.role !== 'user' || String(record.createdBy || '') === String(user.id);
+}
+
+async function getVerificationById(id, user = null) {
+  try {
+    if (mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(id)) {
+      const record = await Verification.findById(id).select('-imageData').lean();
+      return record && canAccessVerification(record, user) ? record : null;
+    }
+  } catch (err) {
+    console.warn('Verification lookup failed:', err.message);
+  }
+
+  const record = inMemoryHistory.find(item => String(item._id) === String(id));
+  return record && canAccessVerification(record, user) ? record : null;
+}
+
+function withoutImageData(record) {
+  if (!record) return record;
+  const result = { ...record };
+  delete result.imageData;
+  return result;
+}
+
+async function updateVerificationReview(id, { status, note = '' }, reviewer) {
+  if (!['PENDING', 'APPROVED', 'REJECTED'].includes(status)) {
+    throw new Error('Review status must be PENDING, APPROVED, or REJECTED.');
+  }
+
+  const review = {
+    status,
+    note: String(note).trim().slice(0, 1000),
+    reviewedBy: reviewer.id,
+    reviewedAt: new Date()
+  };
+
+  if (mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(id)) {
+    const updated = await Verification.findByIdAndUpdate(id, { $set: { review } }, { new: true }).select('-imageData').lean();
+    return withoutImageData(updated);
+  }
+
+  const record = inMemoryHistory.find(item => String(item._id) === String(id));
+  if (!record) return null;
+  record.review = review;
+  return withoutImageData(record);
 }
 
 module.exports = {
   verifyProduct,
   getVerificationHistory,
+  getVerificationById,
+  updateVerificationReview,
   DEMO_SAMPLES
 };

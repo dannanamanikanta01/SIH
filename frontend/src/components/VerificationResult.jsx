@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState } from "react";
 import {
   CheckCircle2,
   XCircle,
@@ -9,19 +9,34 @@ import {
   ChevronUp,
   ShieldCheck,
   ShieldAlert,
-  Info
-} from 'lucide-react';
+  Info,
+} from "lucide-react";
+import { api } from "../services/api";
 
 export default function VerificationResult({ result, onReset }) {
   const [showRawOcr, setShowRawOcr] = useState(false);
+  const [reportLoading, setReportLoading] = useState(false);
 
   if (!result) return null;
 
-  const isCompliant = result.status === 'COMPLIANT';
+  const isCompliant = result.status === "COMPLIANT";
   const score = result.complianceScore ?? 0;
   const checks = result.checks || [];
   const issues = result.detectedIssues || [];
   const extracted = result.extractedData || {};
+  const reviewStatus = result.review?.status || "PENDING";
+  const reviewApproved = reviewStatus === "APPROVED";
+  const reviewRejected = reviewStatus === "REJECTED";
+
+  const handleDownloadReport = async () => {
+    if (!result._id) return;
+    setReportLoading(true);
+    try {
+      await api.downloadReport(result._id);
+    } finally {
+      setReportLoading(false);
+    }
+  };
 
   return (
     <div className="result-card">
@@ -29,23 +44,51 @@ export default function VerificationResult({ result, onReset }) {
       <div className="result-header">
         <div className="product-title-row">
           <span className="result-tagline">Verification Result</span>
-          <h2 className="product-name">{result.productName || 'Packaged Commodity'}</h2>
+          <h2 className="product-name">
+            {result.productName || "Packaged Commodity"}
+          </h2>
           {result.isDemo && (
             <span className="demo-badge">Demo / Prototype Sample</span>
           )}
         </div>
+        <div className={`review-summary review-${reviewStatus.toLowerCase()}`}>
+          <ShieldCheck size={18} />
+          <div>
+            <strong>
+              {reviewApproved
+                ? "Inspector Approved"
+                : reviewRejected
+                  ? "Inspector Rejected"
+                  : "Awaiting Inspector Review"}
+            </strong>
+            <span>
+              {result.review?.note ||
+                (reviewApproved
+                  ? "This verification has been reviewed and approved."
+                  : reviewRejected
+                    ? "Please review the inspector feedback below."
+                    : "An inspector has not reviewed this verification yet.")}
+            </span>
+          </div>
+        </div>
       </div>
 
       {/* Status & Score Banner */}
-      <div className={`status-banner ${isCompliant ? 'status-compliant' : 'status-non-compliant'}`}>
+      <div
+        className={`status-banner ${isCompliant ? "status-compliant" : "status-non-compliant"}`}
+      >
         <div className="status-main">
           <div className="status-icon">
-            {isCompliant ? <ShieldCheck size={42} /> : <ShieldAlert size={42} />}
+            {isCompliant ? (
+              <ShieldCheck size={42} />
+            ) : (
+              <ShieldAlert size={42} />
+            )}
           </div>
           <div className="status-text-block">
             <span className="status-label">Overall Status</span>
             <span className="status-title">
-              {isCompliant ? '✓ COMPLIANT' : '✗ NON-COMPLIANT'}
+              {isCompliant ? "✓ COMPLIANT" : "✗ NON-COMPLIANT"}
             </span>
           </div>
         </div>
@@ -56,7 +99,8 @@ export default function VerificationResult({ result, onReset }) {
             <span className="score-num">{score}%</span>
           </div>
           <span className="score-sub">
-            {result.totalPassed || 0} of {result.totalRules || checks.length} Rules Passed
+            {result.totalPassed || 0} of {result.totalRules || checks.length}{" "}
+            Rules Passed
           </span>
         </div>
       </div>
@@ -70,11 +114,11 @@ export default function VerificationResult({ result, onReset }) {
 
         <div className="checks-list">
           {checks.map((check) => {
-            const passed = check.status === 'PASS';
+            const passed = check.status === "PASS";
             return (
               <div
                 key={check.id || check.name}
-                className={`check-item ${passed ? 'check-pass' : 'check-fail'}`}
+                className={`check-item ${passed ? "check-pass" : "check-fail"}`}
               >
                 <div className="check-status-col">
                   {passed ? (
@@ -87,7 +131,9 @@ export default function VerificationResult({ result, onReset }) {
                 <div className="check-details-col">
                   <div className="check-name-row">
                     <span className="check-name">{check.name}</span>
-                    <span className={`check-badge ${passed ? 'badge-pass' : 'badge-fail'}`}>
+                    <span
+                      className={`check-badge ${passed ? "badge-pass" : "badge-fail"}`}
+                    >
                       {check.status}
                     </span>
                   </div>
@@ -106,7 +152,9 @@ export default function VerificationResult({ result, onReset }) {
                   )}
 
                   {check.ruleReference && (
-                    <span className="rule-reference">{check.ruleReference}</span>
+                    <span className="rule-reference">
+                      {check.ruleReference}
+                    </span>
                   )}
                 </div>
               </div>
@@ -147,13 +195,32 @@ export default function VerificationResult({ result, onReset }) {
         {showRawOcr && (
           <div className="accordion-content">
             <div className="key-value-grid">
-              <div><strong>Product:</strong> {extracted.productName || 'Not detected'}</div>
-              <div><strong>Manufacturer:</strong> {extracted.manufacturer || 'Not detected'}</div>
-              <div><strong>Address:</strong> {extracted.address || 'Not detected'}</div>
-              <div><strong>Net Quantity:</strong> {extracted.netQuantity || 'Not detected'}</div>
-              <div><strong>MRP:</strong> {extracted.mrp || 'Not detected'}</div>
-              <div><strong>Mfg / Pkd Date:</strong> {extracted.manufacturingDate || 'Not detected'}</div>
-              <div><strong>Consumer Care:</strong> {extracted.consumerCare || 'Not detected'}</div>
+              <div>
+                <strong>Product:</strong>{" "}
+                {extracted.productName || "Not detected"}
+              </div>
+              <div>
+                <strong>Manufacturer:</strong>{" "}
+                {extracted.manufacturer || "Not detected"}
+              </div>
+              <div>
+                <strong>Address:</strong> {extracted.address || "Not detected"}
+              </div>
+              <div>
+                <strong>Net Quantity:</strong>{" "}
+                {extracted.netQuantity || "Not detected"}
+              </div>
+              <div>
+                <strong>MRP:</strong> {extracted.mrp || "Not detected"}
+              </div>
+              <div>
+                <strong>Mfg / Pkd Date:</strong>{" "}
+                {extracted.manufacturingDate || "Not detected"}
+              </div>
+              <div>
+                <strong>Consumer Care:</strong>{" "}
+                {extracted.consumerCare || "Not detected"}
+              </div>
             </div>
 
             {extracted.rawText && (
@@ -170,7 +237,10 @@ export default function VerificationResult({ result, onReset }) {
       <div className="legal-disclaimer">
         <Info size={15} />
         <span>
-          <strong>Disclaimer:</strong> Prototype decision-support tool for preliminary package compliance checking under Legal Metrology (Packaged Commodities) Rules, 2011. Not a legally binding or authoritative determination.
+          <strong>Disclaimer:</strong> Prototype decision-support tool for
+          preliminary package compliance checking under Legal Metrology
+          (Packaged Commodities) Rules, 2011. Not a legally binding or
+          authoritative determination.
         </span>
       </div>
 
@@ -178,9 +248,16 @@ export default function VerificationResult({ result, onReset }) {
       <div className="action-footer">
         <button
           type="button"
-          className="scan-another-btn"
-          onClick={onReset}
+          className="secondary-btn report-btn"
+          onClick={handleDownloadReport}
+          disabled={reportLoading || !result._id}
         >
+          <FileText size={18} />
+          <span>
+            {reportLoading ? "Preparing report..." : "Download Report"}
+          </span>
+        </button>
+        <button type="button" className="scan-another-btn" onClick={onReset}>
           <RotateCcw size={18} />
           <span>Scan Another Product</span>
         </button>

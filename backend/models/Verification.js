@@ -1,11 +1,25 @@
 const mongoose = require('mongoose');
 
 const VerificationSchema = new mongoose.Schema({
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
   productName: {
     type: String,
     default: 'Packaged Commodity'
   },
-  imagePath: {
+  imageData: {
+    type: Buffer,
+    default: null,
+    select: false
+  },
+  imageMimeType: {
+    type: String,
+    default: ''
+  },
+  imageName: {
     type: String,
     default: ''
   },
@@ -45,6 +59,16 @@ const VerificationSchema = new mongoose.Schema({
   isDemo: {
     type: Boolean,
     default: false
+  },
+  review: {
+    status: {
+      type: String,
+      enum: ['PENDING', 'APPROVED', 'REJECTED'],
+      default: 'PENDING'
+    },
+    note: { type: String, default: '' },
+    reviewedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    reviewedAt: { type: Date, default: null }
   },
   createdAt: {
     type: Date,
