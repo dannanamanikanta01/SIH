@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   CheckCircle2,
   XCircle,
@@ -13,9 +13,26 @@ import {
 } from "lucide-react";
 import { api } from "../services/api";
 
-export default function VerificationResult({ result, onReset }) {
+export default function VerificationResult({
+  result,
+  onReset,
+  canReview = false,
+  onReviewUpdated,
+  reviewId,
+}) {
   const [showRawOcr, setShowRawOcr] = useState(false);
   const [reportLoading, setReportLoading] = useState(false);
+  const [review, setReview] = useState(
+    result?.review || { status: "PENDING", note: "" },
+  );
+  const [reviewNote, setReviewNote] = useState(result?.review?.note || "");
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewError, setReviewError] = useState(null);
+
+  useEffect(() => {
+    setReview(result?.review || { status: "PENDING", note: "" });
+    setReviewNote(result?.review?.note || "");
+  }, [result]);
 
   if (!result) return null;
 
@@ -24,17 +41,47 @@ export default function VerificationResult({ result, onReset }) {
   const checks = result.checks || [];
   const issues = result.detectedIssues || [];
   const extracted = result.extractedData || {};
-  const reviewStatus = result.review?.status || "PENDING";
+  const reviewStatus = review.status || "PENDING";
   const reviewApproved = reviewStatus === "APPROVED";
   const reviewRejected = reviewStatus === "REJECTED";
+  const canDownloadReport = canReview || reviewApproved || reviewRejected;
 
   const handleDownloadReport = async () => {
-    if (!result._id) return;
+    const reportId = reviewId || result._id;
+    if (!reportId) return;
     setReportLoading(true);
     try {
-      await api.downloadReport(result._id);
+      await api.downloadReport(reportId);
     } finally {
       setReportLoading(false);
+    }
+  };
+
+  const handleReview = async (status) => {
+    const targetId = reviewId || result._id;
+    if (!targetId) return;
+    setReviewLoading(true);
+    setReviewError(null);
+    try {
+      const response = await api.updateReview(targetId, {
+        status,
+        note: reviewNote,
+      });
+      if (!response.result) {
+        throw new Error("The verification record could not be updated.");
+      }
+      setReview(response.result?.review || { status, note: reviewNote });
+      onReviewUpdated?.(
+        response.result?.review || { status, note: reviewNote },
+      );
+    } catch (error) {
+      setReviewError(
+        error.response?.data?.message ||
+          error.message ||
+          "Could not save the inspector decision.",
+      );
+    } finally {
+      setReviewLoading(false);
     }
   };
 
@@ -62,7 +109,7 @@ export default function VerificationResult({ result, onReset }) {
                   : "Awaiting Inspector Review"}
             </strong>
             <span>
-              {result.review?.note ||
+              {review.note ||
                 (reviewApproved
                   ? "This verification has been reviewed and approved."
                   : reviewRejected
@@ -246,22 +293,58 @@ export default function VerificationResult({ result, onReset }) {
 
       {/* Action to scan another */}
       <div className="action-footer">
-        <button
-          type="button"
-          className="secondary-btn report-btn"
-          onClick={handleDownloadReport}
-          disabled={reportLoading || !result._id}
-        >
-          <FileText size={18} />
-          <span>
-            {reportLoading ? "Preparing report..." : "Download Report"}
-          </span>
-        </button>
+        {canDownloadReport && (
+          <button
+            type="button"
+            className="secondary-btn report-btn"
+            onClick={handleDownloadReport}
+            disabled={reportLoading || !(reviewId || result._id)}
+          >
+            <FileText size={18} />
+            <span>
+              {reportLoading ? "Preparing report..." : "Download Report"}
+            </span>
+          </button>
+        )}
         <button type="button" className="scan-another-btn" onClick={onReset}>
           <RotateCcw size={18} />
           <span>Scan Another Product</span>
         </button>
       </div>
+
+      {canReview && (
+        <div className="inspector-review-panel">
+          <div>
+            <p className="eyebrow">INSPECTOR DECISION</p>
+            <h3>Record review outcome</h3>
+          </div>
+          {reviewError && <p className="form-error">{reviewError}</p>}
+          <input
+            value={reviewNote}
+            onChange={(event) => setReviewNote(event.target.value)}
+            placeholder="Add an inspection note"
+            aria-label="Inspection note"
+          />
+          <div className="inspector-review-actions">
+            <button
+              type="button"
+              className="small-action-btn approve-btn"
+              disabled={reviewLoading}
+              onClick={() => handleReview("APPROVED")}
+            >
+              Approve
+            </button>
+            <button
+              type="button"
+              className="small-action-btn reject-btn"
+              disabled={reviewLoading}
+              onClick={() => handleReview("REJECTED")}
+            >
+              Reject
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

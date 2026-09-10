@@ -14,7 +14,7 @@ const PDFDocument = require('pdfkit');
 async function verifyProductHandler(req, res) {
   try {
     const file = req.file;
-    const { demoSampleId, isDemo } = req.body;
+    const { demoSampleId, isDemo, verificationId } = req.body;
 
     if (!file && !demoSampleId && isDemo !== 'true' && isDemo !== true) {
       return res.status(400).json({
@@ -28,6 +28,7 @@ async function verifyProductHandler(req, res) {
       imageMimeType: file ? file.mimetype : '',
       imageName: file ? file.originalname : '',
       demoSampleId,
+      verificationId,
       isDemo: isDemo === 'true' || isDemo === true,
       userId: req.user.id,
       userRole: req.user.role
@@ -52,7 +53,9 @@ async function verifyProductHandler(req, res) {
  */
 async function getVerificationsHandler(req, res) {
   try {
-    const limit = parseInt(req.query.limit, 10) || 10;
+    res.set('Cache-Control', 'no-store');
+    const requestedLimit = Number.parseInt(req.query.limit, 10);
+    const limit = Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : 0;
     const history = await getVerificationHistory(limit, req.user);
     return res.status(200).json({
       success: true,

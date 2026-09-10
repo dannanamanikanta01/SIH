@@ -97,6 +97,23 @@
   box-shadow: var(--shadow-sm);
 }
 
+.history-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.history-heading .eyebrow {
+  margin-bottom: 4px;
+}
+
+.history-heading > span {
+  color: var(--text-muted);
+  font-size: 0.78rem;
+}
+
 .history-title {
   font-size: 0.85rem;
   font-weight: 600;
@@ -125,6 +142,14 @@
 
 .history-item:hover {
   background: #e2e8f0;
+}
+
+.history-status-col {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .history-date {
@@ -1102,6 +1127,13 @@
 .role-brand { color: #0f766e; }
 .icon-text-btn { color: var(--text-muted); padding: 8px; }
 .icon-text-btn:hover { color: var(--danger); }
+.role-nav { display: flex; align-items: center; gap: 6px; }
+.role-nav .icon-text-btn:first-child { color: var(--primary); }
+.role-nav .icon-text-btn:first-child:hover { color: var(--primary-hover); }
+.review-page-heading { padding: 32px 0 24px; }
+.review-page-heading h1 { font-family: Georgia, serif; font-size: clamp(2rem, 4vw, 3rem); letter-spacing: -0.04em; margin-bottom: 8px; }
+.review-page-heading p:last-child { color: var(--text-muted); }
+.review-owner-label { color: var(--text-muted); font-size: 0.72rem; }
 
 .role-intro {
   display: flex;
@@ -1177,6 +1209,10 @@
 .form-note { color: #166534; font-size: 0.8rem; margin-top: 10px; }
 .account-actions { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
 .report-btn { margin-bottom: 10px; }
+.inspector-review-panel { display: grid; gap: 10px; margin-top: 18px; padding: 18px; border: 1px solid #b9ded5; border-radius: 14px; background: #f4fbf8; }
+.inspector-review-panel h3 { font-family: Georgia, serif; font-size: 1.15rem; }
+.inspector-review-panel input { width: 100%; border: 1px solid var(--border); border-radius: 6px; padding: 9px 10px; font: inherit; background: #fff; }
+.inspector-review-actions { display: flex; gap: 8px; }
 
 @media (max-width: 680px) {
   .login-panel { padding: 26px 22px; }

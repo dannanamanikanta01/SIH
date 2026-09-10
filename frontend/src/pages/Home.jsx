@@ -7,13 +7,18 @@ import AppLogo from "../components/AppLogo";
 import {
   AlertCircle,
   ClipboardCheck,
-  History,
+  FileText,
+  LayoutDashboard,
   LogOut,
   ScanLine,
   ShieldCheck,
 } from "lucide-react";
 
-export default function Home({ onLogout }) {
+export default function Home({
+  onLogout,
+  onBackToDashboard,
+  isInspector = false,
+}) {
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [selectedDemo, setSelectedDemo] = useState(null);
@@ -22,7 +27,6 @@ export default function Home({ onLogout }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [history, setHistory] = useState([]);
-  const [showHistory, setShowHistory] = useState(false);
 
   // Load demo samples and history on mount
   useEffect(() => {
@@ -47,6 +51,29 @@ export default function Home({ onLogout }) {
     }
     initData();
   }, []);
+
+  useEffect(() => {
+    if (isInspector) return undefined;
+
+    const refreshUserVerifications = async () => {
+      try {
+        const response = await api.getHistory();
+        const nextHistory = response.verifications || [];
+        setHistory(nextHistory);
+        setVerificationResult((current) => {
+          if (!current) return current;
+          return (
+            nextHistory.find((item) => item._id === current._id) || current
+          );
+        });
+      } catch {
+        // Keep the current queue visible if a background refresh fails.
+      }
+    };
+
+    const refreshTimer = window.setInterval(refreshUserVerifications, 5000);
+    return () => window.clearInterval(refreshTimer);
+  }, [isInspector]);
 
   const handleSelectFile = (file) => {
     setError(null);
@@ -131,49 +158,56 @@ export default function Home({ onLogout }) {
             <span className="badge-dot">•</span>
             <span>Smart India Hackathon</span>
           </div>
-          <h1 className="header-title">Product Compliance Checker</h1>
+          <h1 className="header-title">
+            {isInspector
+              ? "Inspector Product Analysis"
+              : "Product Compliance Checker"}
+          </h1>
           <p className="header-desc">
-            Automated compliance verification under Legal Metrology (Packaged
-            Commodities) Rules, 2011
+            {isInspector
+              ? "Analyze the package, download the report, and record your approval decision."
+              : "Automated compliance verification under Legal Metrology (Packaged Commodities) Rules, 2011"}
           </p>
         </div>
 
         <div className="header-actions">
+          {onBackToDashboard && (
+            <button
+              type="button"
+              className="text-btn"
+              onClick={onBackToDashboard}
+            >
+              <LayoutDashboard size={15} />
+              <span>Dashboard</span>
+            </button>
+          )}
           {onLogout && (
             <button type="button" className="text-btn" onClick={onLogout}>
               <LogOut size={15} />
               <span>Sign out</span>
             </button>
           )}
-          {history.length > 0 && (
-            <button
-              type="button"
-              className="text-btn"
-              onClick={() => setShowHistory(!showHistory)}
-            >
-              <History size={15} />
-              <span>
-                {showHistory
-                  ? "Hide History"
-                  : `Past Verifications (${history.length})`}
-              </span>
-            </button>
-          )}
         </div>
       </header>
 
-      {/* History panel if toggled */}
-      {showHistory && (
-        <div className="history-panel">
-          <h4 className="history-title">Recent Verifications</h4>
+      <section className="history-panel my-verifications-panel">
+        <div className="history-heading">
+          <div>
+            <p className="eyebrow">MY VERIFICATIONS</p>
+            <h2 className="history-title">Verification queue</h2>
+          </div>
+          <span>{history.length} total</span>
+        </div>
+        {history.length === 0 ? (
+          <p className="empty-state">No verifications submitted yet.</p>
+        ) : (
           <div className="history-list">
-            {history.slice(0, 5).map((item, i) => (
+            {history.map((item, i) => (
               <div
                 key={item._id || i}
                 className="history-item"
                 onClick={() => {
                   setVerificationResult(item);
-                  setShowHistory(false);
                 }}
               >
                 <div>
@@ -200,12 +234,26 @@ export default function Home({ onLogout }) {
                         ? "Inspector Rejected"
                         : "Awaiting Inspector Review"}
                   </span>
+                  {(item.review?.status === "APPROVED" ||
+                    item.review?.status === "REJECTED") && (
+                    <button
+                      type="button"
+                      className="small-action-btn"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        api.downloadReport(item._id);
+                      }}
+                      title="Download report"
+                    >
+                      <FileText size={15} /> Report
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </section>
 
       {/* Error alert */}
       {error && (
@@ -230,6 +278,7 @@ export default function Home({ onLogout }) {
           <VerificationResult
             result={verificationResult}
             onReset={handleResetAll}
+            canReview={isInspector}
           />
         ) : (
           <div className="verification-workspace">

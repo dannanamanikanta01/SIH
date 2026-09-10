@@ -9,7 +9,7 @@ const inMemoryHistory = [];
 /**
  * Run end-to-end verification on uploaded image bytes or a sample preset.
  */
-async function verifyProduct({ imageBuffer = null, imageMimeType = '', imageName = '', demoSampleId, customExtractedData = null, isDemo = false, userId = null }) {
+async function verifyProduct({ imageBuffer = null, imageMimeType = '', imageName = '', demoSampleId, verificationId = null, customExtractedData = null, isDemo = false, userId = null }) {
   let extractedData = null;
   let ocrResult = null;
   let productName = 'Packaged Commodity';
@@ -54,6 +54,50 @@ async function verifyProduct({ imageBuffer = null, imageMimeType = '', imageName
 
   // 4. Run Rule Engine
   const complianceResult = evaluateCompliance(extractedData);
+
+  const analysisFields = {
+    productName: extractedData.productName || productName,
+    imageData: imageBuffer,
+    imageMimeType,
+    imageName,
+    extractedData,
+    complianceScore: complianceResult.score,
+    status: complianceResult.status,
+    totalPassed: complianceResult.totalPassed,
+    totalRules: complianceResult.totalRules,
+    checks: complianceResult.checks,
+    detectedIssues: complianceResult.detectedIssues,
+    isDemo: demoUsed,
+    ocrConfidence: ocrResult ? ocrResult.confidence : null,
+    review: {
+      status: 'PENDING',
+      note: '',
+      reviewedBy: null,
+      reviewedAt: null
+    }
+  };
+
+  if (verificationId) {
+    try {
+      if (mongoose.connection.readyState === 1 && mongoose.Types.ObjectId.isValid(verificationId)) {
+        const updated = await Verification.findByIdAndUpdate(
+          verificationId,
+          { $set: analysisFields },
+          { new: true, runValidators: true }
+        ).select('-imageData').lean();
+        if (!updated) throw new Error('Verification record not found.');
+        return withoutImageData(updated);
+      }
+
+      const existing = inMemoryHistory.find(item => String(item._id) === String(verificationId));
+      if (!existing) throw new Error('Verification record not found.');
+      Object.assign(existing, analysisFields);
+      return withoutImageData(existing);
+    } catch (err) {
+      console.error('Inspector verification update failed:', err.message);
+      throw err;
+    }
+  }
 
   const verificationRecord = {
     createdBy: userId || null,
@@ -103,10 +147,12 @@ async function verifyProduct({ imageBuffer = null, imageMimeType = '', imageName
 async function getVerificationHistory(limit = 10, user = null) {
   try {
     if (mongoose.connection.readyState === 1) {
-      const filter = user?.role === 'user' && mongoose.Types.ObjectId.isValid(user.id)
-        ? { createdBy: user.id }
+      const filter = user?.role === 'user'
+        ? (mongoose.Types.ObjectId.isValid(user.id) ? { createdBy: user.id } : { createdBy: null })
         : {};
-      return await Verification.find(filter).select('-imageData').sort({ createdAt: -1 }).limit(limit).lean();
+      const query = Verification.find(filter).select('-imageData').sort({ createdAt: -1 });
+      if (limit > 0) query.limit(limit);
+      return await query.lean();
     }
   } catch (err) {
     console.warn('MongoDB query failed, falling back to memory:', err.message);
@@ -114,7 +160,8 @@ async function getVerificationHistory(limit = 10, user = null) {
   const visibleHistory = user?.role === 'user'
     ? inMemoryHistory.filter(item => item.createdBy === user.id)
     : inMemoryHistory;
-  return visibleHistory.slice(0, limit).map(withoutImageData);
+  const records = limit > 0 ? visibleHistory.slice(0, limit) : visibleHistory;
+  return records.map(withoutImageData);
 }
 
 function canAccessVerification(record, user) {

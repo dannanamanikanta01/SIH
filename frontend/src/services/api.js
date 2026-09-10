@@ -7,6 +7,18 @@ const authConfig = () => {
   return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
 };
 
+axios.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && !error.config?.url?.includes('/auth/login')) {
+      localStorage.removeItem('sih_token');
+      localStorage.removeItem('sih_user');
+      window.dispatchEvent(new Event('sih:session-expired'));
+    }
+    return Promise.reject(error);
+  },
+);
+
 export const api = {
   login: async ({ email, password }) => {
     const response = await axios.post(`${API_BASE}/auth/login`, { email, password });
@@ -36,7 +48,7 @@ export const api = {
   /**
    * Verify uploaded image or demo sample
    */
-  verifyProduct: async ({ file, demoSampleId, isDemo = false }) => {
+  verifyProduct: async ({ file, demoSampleId, isDemo = false, verificationId }) => {
     const formData = new FormData();
     if (file) {
       formData.append('image', file);
@@ -46,6 +58,9 @@ export const api = {
     }
     if (isDemo) {
       formData.append('isDemo', 'true');
+    }
+    if (verificationId) {
+      formData.append('verificationId', verificationId);
     }
 
     const response = await axios.post(`${API_BASE}/verify`, formData, authConfig());
@@ -64,7 +79,10 @@ export const api = {
    * Fetch recent verification history
    */
   getHistory: async () => {
-    const response = await axios.get(`${API_BASE}/verifications`, authConfig());
+    const response = await axios.get(
+      `${API_BASE}/verifications?_t=${Date.now()}`,
+      authConfig(),
+    );
     return response.data;
   },
 

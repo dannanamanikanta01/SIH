@@ -8,6 +8,7 @@ import {
   Users,
 } from "lucide-react";
 import { api } from "../services/api";
+import InspectorScan from "./InspectorScan";
 
 export default function RoleDashboard({ user, onLogout }) {
   const [history, setHistory] = useState([]);
@@ -17,7 +18,6 @@ export default function RoleDashboard({ user, onLogout }) {
     compliant: 0,
     nonCompliant: 0,
   });
-  const [reviewNotes, setReviewNotes] = useState({});
   const [busyId, setBusyId] = useState(null);
   const [accountForm, setAccountForm] = useState({
     name: "",
@@ -26,7 +26,12 @@ export default function RoleDashboard({ user, onLogout }) {
     role: "user",
   });
   const [accountMessage, setAccountMessage] = useState(null);
+  const [showInspectorScan, setShowInspectorScan] = useState(false);
+  const [selectedVerification, setSelectedVerification] = useState(null);
   const isAdmin = user.role === "admin";
+  const visibleHistory = isAdmin
+    ? history
+    : history.filter((item) => item.review?.status === "PENDING");
 
   useEffect(() => {
     api
@@ -58,15 +63,15 @@ export default function RoleDashboard({ user, onLogout }) {
     setHistory(result.verifications || []);
   };
 
-  const handleReview = async (id, status) => {
-    setBusyId(id);
-    try {
-      await api.updateReview(id, { status, note: reviewNotes[id] || "" });
-      await refreshHistory();
-    } finally {
-      setBusyId(null);
-    }
-  };
+  useEffect(() => {
+    if (isAdmin) return undefined;
+
+    const refreshTimer = window.setInterval(() => {
+      refreshHistory().catch(() => {});
+    }, 3000);
+
+    return () => window.clearInterval(refreshTimer);
+  }, [isAdmin]);
 
   const handleCreateAccount = async (event) => {
     event.preventDefault();
@@ -98,6 +103,21 @@ export default function RoleDashboard({ user, onLogout }) {
     }
   };
 
+  if (showInspectorScan) {
+    return (
+      <InspectorScan
+        verification={selectedVerification}
+        verificationId={selectedVerification?._id}
+        onBack={async () => {
+          await refreshHistory();
+          setShowInspectorScan(false);
+          setSelectedVerification(null);
+        }}
+        onLogout={onLogout}
+      />
+    );
+  }
+
   return (
     <main className="role-shell">
       <header className="role-header">
@@ -105,9 +125,11 @@ export default function RoleDashboard({ user, onLogout }) {
           <ShieldCheck size={25} />
           <span>Compliance Desk</span>
         </div>
-        <button className="icon-text-btn" onClick={onLogout}>
-          <LogOut size={16} /> Sign out
-        </button>
+        <nav className="role-nav" aria-label="Workspace navigation">
+          <button className="icon-text-btn" onClick={onLogout}>
+            <LogOut size={16} /> Sign out
+          </button>
+        </nav>
       </header>
       <section className="role-intro">
         <div>
@@ -154,13 +176,13 @@ export default function RoleDashboard({ user, onLogout }) {
             </p>
             <h2>Recent verifications</h2>
           </div>
-          <span>{history.length} records</span>
+          <span>{visibleHistory.length} records</span>
         </div>
-        {history.length === 0 ? (
+        {visibleHistory.length === 0 ? (
           <p className="empty-state">No verification records yet.</p>
         ) : (
           <div className="record-list">
-            {history.slice(0, 10).map((item) => (
+            {visibleHistory.slice(0, 10).map((item) => (
               <div className="record-row" key={item._id}>
                 <div>
                   <strong>{item.productName || "Packaged commodity"}</strong>
@@ -176,41 +198,28 @@ export default function RoleDashboard({ user, onLogout }) {
                 >
                   {item.review?.status || "PENDING"}
                 </span>
-                <button
-                  className="small-action-btn"
-                  onClick={() => api.downloadReport(item._id)}
-                  title="Download report"
-                >
-                  <FileText size={15} />
-                </button>
+                {!isAdmin && item.review?.status === "PENDING" && (
+                  <button
+                    className="small-action-btn approve-btn"
+                    onClick={() => {
+                      setSelectedVerification(item);
+                      setShowInspectorScan(true);
+                    }}
+                  >
+                    Scan & review
+                  </button>
+                )}
+                {isAdmin && (
+                  <button
+                    className="small-action-btn"
+                    onClick={() => api.downloadReport(item._id)}
+                    title="Download report"
+                  >
+                    <FileText size={15} />
+                  </button>
+                )}
                 {!isAdmin && (
-                  <div className="review-controls">
-                    <input
-                      value={reviewNotes[item._id] || ""}
-                      onChange={(event) =>
-                        setReviewNotes((current) => ({
-                          ...current,
-                          [item._id]: event.target.value,
-                        }))
-                      }
-                      placeholder="Inspector note"
-                      aria-label="Inspector note"
-                    />
-                    <button
-                      className="small-action-btn approve-btn"
-                      disabled={busyId === item._id}
-                      onClick={() => handleReview(item._id, "APPROVED")}
-                    >
-                      Approve
-                    </button>
-                    <button
-                      className="small-action-btn reject-btn"
-                      disabled={busyId === item._id}
-                      onClick={() => handleReview(item._id, "REJECTED")}
-                    >
-                      Reject
-                    </button>
-                  </div>
+                  <span className="review-owner-label">User submission</span>
                 )}
               </div>
             ))}
